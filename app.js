@@ -127,16 +127,16 @@ const earthMaterial = new THREE.MeshPhongMaterial({
   emissiveIntensity: 0.6,
   shininess: 12,
   specular: 0x223a55,
-  transparent: true,
-  opacity: 0.92,
 });
 const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(RADIUS, 96, 96), earthMaterial);
 earthGroup.add(earthMesh);
 
-// neon wireframe overlay
-const wireMat = new THREE.LineBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.18 });
+// neon wireframe overlay (just inside the earth surface for subtle grid hint)
+const wireMat = new THREE.LineBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.12 });
 const wireGeo = new THREE.WireframeGeometry(new THREE.SphereGeometry(RADIUS * 1.001, 32, 24));
-earthGroup.add(new THREE.LineSegments(wireGeo, wireMat));
+const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
+wireMesh.renderOrder = 1;
+earthGroup.add(wireMesh);
 
 // ----------------------------------------------------------
 // continent outlines from GeoJSON (Natural Earth 110m)
@@ -178,14 +178,13 @@ async function buildContinents(radius) {
   const lineMat = new THREE.LineBasicMaterial({
     color: 0x6effd6,
     transparent: true,
-    opacity: 0.55,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
+    opacity: 0.85,
   });
   const lines = new THREE.LineSegments(lineGeo, lineMat);
+  lines.renderOrder = 2;
   earthGroup.add(lines);
 }
-buildContinents(RADIUS * 1.005);
+buildContinents(RADIUS * 1.018);
 
 // outer glow (atmosphere)
 const glowMat = new THREE.ShaderMaterial({
@@ -208,7 +207,7 @@ const glowMat = new THREE.ShaderMaterial({
 });
 earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.18, 64, 64), glowMat));
 
-// rim highlight (front-side fresnel)
+// rim highlight (front-side fresnel) — sits on outer atmosphere, never overlaps continent lines
 const rimMat = new THREE.ShaderMaterial({
   uniforms: { color: { value: new THREE.Color(0x8b5cff) } },
   vertexShader: `varying vec3 vNormal; void main(){ vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);} `,
@@ -218,7 +217,9 @@ const rimMat = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
 });
-earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.005, 64, 64), rimMat));
+const rimMesh = new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.04, 64, 64), rimMat);
+rimMesh.renderOrder = 4;
+earthGroup.add(rimMesh);
 
 // stars / particles
 const starGeo = new THREE.BufferGeometry();
@@ -288,7 +289,7 @@ function buildPoints(proxies) {
     const mesh = new THREE.InstancedMesh(geo, mat, arr.length);
     const dummy = new THREE.Object3D();
     arr.forEach((p, i) => {
-      const v = latLonToVec3(p.lat, p.lon, RADIUS * 1.012);
+      const v = latLonToVec3(p.lat, p.lon, RADIUS * 1.025);
       dummy.position.copy(v);
       dummy.lookAt(v.clone().multiplyScalar(2));
       dummy.updateMatrix();
@@ -296,6 +297,7 @@ function buildPoints(proxies) {
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.userData.status = s;
+    mesh.renderOrder = 3;
     earthGroup.add(mesh);
     STATE.meshes[s] = mesh;
     STATE.lookups[s] = arr;
