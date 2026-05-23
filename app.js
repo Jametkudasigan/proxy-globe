@@ -17,7 +17,7 @@ const STATE = {
 // ----------------------------------------------------------
 async function loadData() {
   try {
-    const r = await fetch('data/proxies.json', { cache: 'no-store' });
+    const r = await fetch('data/proxies.json?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('no data');
     return await r.json();
   } catch {
@@ -137,6 +137,55 @@ earthGroup.add(earthMesh);
 const wireMat = new THREE.LineBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.18 });
 const wireGeo = new THREE.WireframeGeometry(new THREE.SphereGeometry(RADIUS * 1.001, 32, 24));
 earthGroup.add(new THREE.LineSegments(wireGeo, wireMat));
+
+// ----------------------------------------------------------
+// continent outlines from GeoJSON (Natural Earth 110m)
+// ----------------------------------------------------------
+async function buildContinents(radius) {
+  let geo;
+  try {
+    const r = await fetch('data/world.json', { cache: 'force-cache' });
+    geo = await r.json();
+  } catch (e) { return; }
+
+  const positions = [];
+
+  function addRing(ring) {
+    for (let i = 0; i < ring.length; i++) {
+      const [lon, lat] = ring[i];
+      const v = latLonToVec3(lat, lon, radius);
+      if (i > 0) {
+        // segment from previous point to current
+        const [plon, plat] = ring[i - 1];
+        const pv = latLonToVec3(plat, plon, radius);
+        positions.push(pv.x, pv.y, pv.z, v.x, v.y, v.z);
+      }
+    }
+  }
+
+  for (const feat of geo.features || []) {
+    const g = feat.geometry;
+    if (!g) continue;
+    if (g.type === 'Polygon') {
+      g.coordinates.forEach(addRing);
+    } else if (g.type === 'MultiPolygon') {
+      g.coordinates.forEach(poly => poly.forEach(addRing));
+    }
+  }
+
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const lineMat = new THREE.LineBasicMaterial({
+    color: 0x6effd6,
+    transparent: true,
+    opacity: 0.55,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const lines = new THREE.LineSegments(lineGeo, lineMat);
+  earthGroup.add(lines);
+}
+buildContinents(RADIUS * 1.005);
 
 // outer glow (atmosphere)
 const glowMat = new THREE.ShaderMaterial({
@@ -267,6 +316,36 @@ function onPointer(e) {
 }
 canvas.addEventListener('pointermove', onPointer);
 
+// ----------------------------------------------------------
+// floating tooltip on hover
+// ----------------------------------------------------------
+const tooltip = document.createElement('div');
+tooltip.id = 'tooltip';
+tooltip.className = 'tooltip';
+document.body.appendChild(tooltip);
+
+function showTooltip(p, x, y) {
+  if (!p) { tooltip.style.opacity = '0'; tooltip.style.pointerEvents = 'none'; return; }
+  const proxy = `${p.ip}:${p.port}`;
+  tooltip.innerHTML = `
+    <div class="tt-row tt-ip">
+      <span class="tt-status tt-${p.status}"></span>
+      <span class="tt-proxy">${proxy}</span>
+    </div>
+    <div class="tt-row tt-meta">
+      <span>${p.city || '—'}, ${p.cc || '—'}</span>
+      <span>${p.alive ? p.latency_ms.toFixed(0) + 'ms' : 'dead'}</span>
+    </div>
+    <div class="tt-hint">click to copy</div>
+  `;
+  tooltip.style.opacity = '1';
+  tooltip.style.left = (x + 14) + 'px';
+  tooltip.style.top = (y + 14) + 'px';
+}
+
+let lastClientX = 0, lastClientY = 0;
+canvas.addEventListener('pointermove', (e) => { lastClientX = e.clientX; lastClientY = e.clientY; });
+
 function pickProxy() {
   raycaster.setFromCamera(pointer, camera);
   const hits = [];
@@ -303,26 +382,45 @@ function renderSelected(p) {
   });
 }
 
-canvas.addEventListener('click', () => {
+canvas.addEventListener('click', (e) => {
   const hit = pickProxy();
   if (!hit) return;
   const p = STATE.lookups[hit.status][hit.instanceId];
   STATE.hovered = p;
   renderSelected(p);
+  // copy IP:port to clipboard on click directly
+  const proxy = `${p.ip}:${p.port}`;
+  navigator.clipboard?.writeText(proxy);
+  // briefly indicate via tooltip
+  tooltip.innerHTML = `
+    <div class="tt-row tt-ip">
+      <span class="tt-status tt-${p.status}"></span>
+      <span class="tt-proxy">${proxy}</span>
+    </div>
+    <div class="tt-row tt-meta"><span style="color:var(--neon-cyan);font-weight:600;">copied to clipboard</span></div>
+  `;
+  tooltip.style.opacity = '1';
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top = (e.clientY + 14) + 'px';
 });
 
 // pulse hovered point + tooltip-like update on hover only when over a dot
 let lastTipFrame = 0;
 function maybeHoverTooltip(now) {
-  if (now - lastTipFrame < 80) return;
+  if (now - lastTipFrame < 60) return;
   lastTipFrame = now;
   const hit = pickProxy();
   if (hit) {
     const p = STATE.lookups[hit.status][hit.instanceId];
-    if (p && (!STATE.hovered || STATE.hovered.ip !== p.ip || STATE.hovered.port !== p.port)) {
-      STATE.hovered = p;
-      renderSelected(p);
+    if (p) {
+      showTooltip(p, lastClientX, lastClientY);
+      if (!STATE.hovered || STATE.hovered.ip !== p.ip || STATE.hovered.port !== p.port) {
+        STATE.hovered = p;
+        renderSelected(p);
+      }
     }
+  } else {
+    showTooltip(null);
   }
 }
 
@@ -409,11 +507,38 @@ function animate(now) {
 // ----------------------------------------------------------
 // boot
 // ----------------------------------------------------------
-(async () => {
-  resize();
+let lastGeneratedAt = 0;
+
+async function refreshData(initial = false) {
   const data = await loadData();
+  if (!initial && data.generated_at === lastGeneratedAt) {
+    return false;
+  }
+  lastGeneratedAt = data.generated_at;
   STATE.data = data;
   buildPoints(data.proxies || []);
+  applyFilter();
   renderStats(data);
+  // pulse the live indicator
+  const dot = document.querySelector('.logo-dot');
+  if (dot && !initial) {
+    dot.style.animation = 'none';
+    void dot.offsetWidth; // restart animation
+    dot.style.animation = '';
+    dot.style.background = 'var(--ok)';
+    dot.style.boxShadow = '0 0 14px var(--ok), 0 0 28px var(--ok)';
+    setTimeout(() => {
+      dot.style.background = '';
+      dot.style.boxShadow = '';
+    }, 1100);
+  }
+  return true;
+}
+
+(async () => {
+  resize();
+  await refreshData(true);
   requestAnimationFrame(animate);
+  // poll for fresh dataset every 60s — GitHub Actions refreshes data every 30 min
+  setInterval(() => refreshData(false), 60 * 1000);
 })();
