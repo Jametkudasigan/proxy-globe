@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 
 // ----------------------------------------------------------
 // state
@@ -173,18 +176,45 @@ async function buildContinents(radius) {
     }
   }
 
-  const lineGeo = new THREE.BufferGeometry();
-  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  const lineMat = new THREE.LineBasicMaterial({
+  const lineGeo = new LineSegmentsGeometry();
+  lineGeo.setPositions(positions);
+
+  // Outer halo — thick, glow-like
+  const haloMat = new LineMaterial({
     color: 0x6effd6,
+    linewidth: 4.5,           // pixels (thick neon outer glow)
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.45,
+    depthTest: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
   });
-  const lines = new THREE.LineSegments(lineGeo, lineMat);
-  lines.renderOrder = 2;
-  earthGroup.add(lines);
+  haloMat.resolution.set(window.innerWidth, window.innerHeight);
+  const halo = new LineSegments2(lineGeo, haloMat);
+  halo.computeLineDistances();
+  halo.renderOrder = 2;
+  earthGroup.add(halo);
+
+  // Inner core — bright, sharp
+  const coreMat = new LineMaterial({
+    color: 0xb8ffe6,
+    linewidth: 1.6,
+    transparent: true,
+    opacity: 1.0,
+    depthTest: true,
+    depthWrite: true,
+    blending: THREE.NormalBlending,
+  });
+  coreMat.resolution.set(window.innerWidth, window.innerHeight);
+  const core = new LineSegments2(lineGeo, coreMat);
+  core.computeLineDistances();
+  core.renderOrder = 3;
+  earthGroup.add(core);
+
+  // store materials so resize can update resolution
+  STATE.lineMats = [haloMat, coreMat];
 }
-buildContinents(RADIUS * 1.018);
+buildContinents(RADIUS * 1.022);
 
 // outer glow (atmosphere)
 const glowMat = new THREE.ShaderMaterial({
@@ -289,7 +319,7 @@ function buildPoints(proxies) {
     const mesh = new THREE.InstancedMesh(geo, mat, arr.length);
     const dummy = new THREE.Object3D();
     arr.forEach((p, i) => {
-      const v = latLonToVec3(p.lat, p.lon, RADIUS * 1.025);
+      const v = latLonToVec3(p.lat, p.lon, RADIUS * 1.032);
       dummy.position.copy(v);
       dummy.lookAt(v.clone().multiplyScalar(2));
       dummy.updateMatrix();
@@ -297,7 +327,7 @@ function buildPoints(proxies) {
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.userData.status = s;
-    mesh.renderOrder = 3;
+    mesh.renderOrder = 4;
     earthGroup.add(mesh);
     STATE.meshes[s] = mesh;
     STATE.lookups[s] = arr;
@@ -483,6 +513,10 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  // update LineMaterial resolution so fat lines scale correctly
+  if (STATE.lineMats) {
+    for (const m of STATE.lineMats) m.resolution.set(w, h);
+  }
 }
 window.addEventListener('resize', resize);
 
