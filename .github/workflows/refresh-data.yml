@@ -2,8 +2,8 @@ name: Refresh Proxy Data
 
 on:
   schedule:
-    # every 30 minutes
-    - cron: "*/30 * * * *"
+    # every 15 minutes
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
