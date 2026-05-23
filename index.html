@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Proxy Globe — SOCKS5 Health Monitor</title>
+<meta name="description" content="Real-time-ish health dashboard of free SOCKS5 proxies plotted on a draggable 3D globe." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="bg-grid"></div>
+<div id="bg-glow"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo-dot"></span>
+    <span class="brand-text">PROXY<span class="accent">·</span>GLOBE</span>
+    <span class="brand-sub">SOCKS5 health monitor</span>
+  </div>
+  <nav class="meta">
+    <span class="meta-item"><span class="meta-label">last sync</span><span id="ts" class="meta-val">—</span></span>
+    <span class="meta-item"><span class="meta-label">total</span><span id="total" class="meta-val">—</span></span>
+  </nav>
+</header>
+
+<main>
+  <section class="panel left">
+    <div class="card">
+      <div class="card-title">SIGNAL LEGEND</div>
+      <ul class="legend">
+        <li><span class="dot ok"></span><span>healthy &lt; 1000 ms</span></li>
+        <li><span class="dot weak"></span><span>weak 1000-2500 ms</span></li>
+        <li><span class="dot dead"></span><span>dead / unreachable</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">FILTER</div>
+      <div class="filter-row">
+        <button class="chip on" data-filter="all">all</button>
+        <button class="chip" data-filter="ok">ok</button>
+        <button class="chip" data-filter="weak">weak</button>
+        <button class="chip" data-filter="dead">dead</button>
+      </div>
+    </div>
+    <div class="card stats">
+      <div class="card-title">METRICS</div>
+      <div class="stat"><span class="stat-label">healthy</span><span id="stat-ok" class="stat-val ok">0</span></div>
+      <div class="stat"><span class="stat-label">weak</span><span id="stat-weak" class="stat-val weak">0</span></div>
+      <div class="stat"><span class="stat-label">dead</span><span id="stat-dead" class="stat-val dead">0</span></div>
+      <div class="stat"><span class="stat-label">countries</span><span id="stat-cc" class="stat-val">0</span></div>
+    </div>
+  </section>
+
+  <section class="globe-wrap">
+    <canvas id="globe"></canvas>
+    <div class="cursor-hint">drag to rotate · scroll to zoom</div>
+  </section>
+
+  <section class="panel right">
+    <div class="card">
+      <div class="card-title">SELECTED NODE</div>
+      <div id="selected" class="selected">
+        <div class="sel-empty">hover or tap a proxy dot</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">TOP COUNTRIES</div>
+      <ol id="top-cc" class="top-cc"></ol>
+    </div>
+  </section>
+</main>
+
+<footer class="bottombar">
+  <span>data refreshed by GitHub Action · static snapshot</span>
+  <span><a href="https://github.com/Jametkudasigan/proxy-globe" target="_blank" rel="noopener">source</a></span>
+</footer>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
