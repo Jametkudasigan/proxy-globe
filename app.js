@@ -179,12 +179,12 @@ async function buildContinents(radius) {
   const lineGeo = new LineSegmentsGeometry();
   lineGeo.setPositions(positions);
 
-  // Outer halo — thick, glow-like
+  // Outer halo — soft thin glow
   const haloMat = new LineMaterial({
     color: 0x6effd6,
-    linewidth: 4.5,           // pixels (thick neon outer glow)
+    linewidth: 2.4,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.55,
     depthTest: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
@@ -195,10 +195,10 @@ async function buildContinents(radius) {
   halo.renderOrder = 2;
   earthGroup.add(halo);
 
-  // Inner core — bright, sharp
+  // Inner core — razor-thin bright neon
   const coreMat = new LineMaterial({
-    color: 0xb8ffe6,
-    linewidth: 1.6,
+    color: 0xeaffff,
+    linewidth: 0.9,
     transparent: true,
     opacity: 1.0,
     depthTest: true,
